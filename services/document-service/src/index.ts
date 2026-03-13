@@ -82,65 +82,81 @@ app.use((_req: Request, res: Response) => {
 
 // --- Startup ---
 async function start(): Promise<void> {
-  try {
-    logger.info('Starting document service...');
+  logger.info('Starting document service...');
 
-    // Initialize storage buckets
+  // Initialize storage buckets (non-blocking)
+  try {
     await initializeStorage();
     logger.info('Storage initialized');
+  } catch (err) {
+    logger.warn('Storage initialization failed, continuing without storage', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
-    // Initialize database schema
+  // Initialize database schema (non-blocking)
+  try {
     await initializeDatabase();
     logger.info('Database initialized');
+  } catch (err) {
+    logger.warn('Database initialization failed, continuing without database', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
-    // Start the document processing worker
+  // Start the document processing worker (non-blocking)
+  try {
     startProcessor();
     logger.info('Document processor started');
-
-    // Start email ingestion if enabled
-    await startEmailIngestion();
-
-    // Start HTTP server
-    const server = app.listen(config.port, () => {
-      logger.info(`Document service listening on port ${config.port}`);
-    });
-
-    // Graceful shutdown
-    const shutdown = async (signal: string) => {
-      logger.info(`Received ${signal}, shutting down gracefully...`);
-
-      server.close(async () => {
-        try {
-          await stopEmailIngestion();
-          await stopProcessor();
-          await shutdownOcr();
-          await shutdownIngestion();
-          logger.info('Graceful shutdown completed');
-          process.exit(0);
-        } catch (err) {
-          logger.error('Error during shutdown', {
-            error: err instanceof Error ? err.message : String(err),
-          });
-          process.exit(1);
-        }
-      });
-
-      // Force exit after 30 seconds
-      setTimeout(() => {
-        logger.error('Forced shutdown after timeout');
-        process.exit(1);
-      }, 30000);
-    };
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (err) {
-    logger.error('Failed to start document service', {
+    logger.warn('Document processor failed to start, continuing without processor', {
       error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
     });
-    process.exit(1);
   }
+
+  // Start email ingestion if enabled (non-blocking)
+  try {
+    await startEmailIngestion();
+  } catch (err) {
+    logger.warn('Email ingestion failed to start', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Start HTTP server - this must succeed
+  const server = app.listen(config.port, () => {
+    logger.info(`Document service listening on port ${config.port}`);
+  });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+
+    server.close(async () => {
+      try {
+        await stopEmailIngestion();
+        await stopProcessor();
+        await shutdownOcr();
+        await shutdownIngestion();
+        logger.info('Graceful shutdown completed');
+        process.exit(0);
+      } catch (err) {
+        logger.error('Error during shutdown', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        process.exit(1);
+      }
+    });
+
+    // Force exit after 30 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 30000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 start();

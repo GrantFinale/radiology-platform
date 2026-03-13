@@ -86,8 +86,21 @@ async function start(): Promise<void> {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (err) {
-    logger.error('Failed to start order service', { error: (err as Error).message });
-    process.exit(1);
+    logger.error('Failed to start order service, attempting to start HTTP server anyway', { error: (err as Error).message });
+    const server = app.listen(config.port, () => {
+      logger.info(`Order service listening on port ${config.port} (degraded mode)`, {
+        env: config.nodeEnv,
+      });
+    });
+
+    process.on('SIGTERM', () => {
+      server.close(() => process.exit(0));
+      setTimeout(() => process.exit(1), 30_000);
+    });
+    process.on('SIGINT', () => {
+      server.close(() => process.exit(0));
+      setTimeout(() => process.exit(1), 30_000);
+    });
   }
 }
 
