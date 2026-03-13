@@ -1,25 +1,13 @@
 # =============================================================================
-# Single-stage unified build: all services in one container
-# Uses node:20-bookworm-slim as base (has Node.js already)
+# Unified container: all Node.js services + supervisor
+# NLP service excluded to keep build fast and small
 # =============================================================================
-FROM node:20-bookworm-slim
+FROM node:20-alpine
 
-# Install Python 3, supervisor, and tesseract
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      python3 \
-      python3-pip \
-      python3-venv \
-      supervisor \
-      tesseract-ocr \
-      curl \
-      ca-certificates && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install supervisor
+RUN apk add --no-cache supervisor
 
 WORKDIR /app
-
-# --- Node.js setup ---
 
 # Copy root config files
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -54,19 +42,7 @@ COPY services/order-service/src services/order-service/src
 COPY services/document-service/src services/document-service/src
 COPY services/integration-service/src services/integration-service/src
 
-# --- Python NLP service setup ---
-
-COPY services/nlp-service/requirements.txt services/nlp-service/
-
-# Install Python deps (use --break-system-packages for bookworm)
-RUN pip3 install --no-cache-dir --break-system-packages -r services/nlp-service/requirements.txt && \
-    python3 -m spacy download en_core_web_sm
-
-# Copy NLP service source code
-COPY services/nlp-service/src services/nlp-service/src
-
-# --- Supervisor config ---
-
+# Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir -p /var/log/supervisor
 
