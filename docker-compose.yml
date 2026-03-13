@@ -2,8 +2,6 @@ version: "3.9"
 
 x-node-base: &node-base
   restart: unless-stopped
-  networks:
-    - rip-network
   environment: &node-env
     NODE_ENV: production
     LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -32,9 +30,8 @@ services:
     build:
       context: .
       dockerfile: services/api-gateway/Dockerfile
-    container_name: rip-api-gateway
     ports:
-      - "${API_GATEWAY_PORT:-3000}:3000"
+      - "3000:3000"
     environment:
       <<: *node-env
       SERVICE_NAME: api-gateway
@@ -45,7 +42,7 @@ services:
       INTEGRATION_SERVICE_URL: http://integration-service:3004
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://radiology.5story.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +63,6 @@ services:
     build:
       context: .
       dockerfile: services/order-service/Dockerfile
-    container_name: rip-order-service
     environment:
       <<: *node-env
       SERVICE_NAME: order-service
@@ -93,7 +89,6 @@ services:
     build:
       context: .
       dockerfile: services/document-service/Dockerfile
-    container_name: rip-document-service
     environment:
       <<: *node-env
       SERVICE_NAME: document-service
@@ -125,9 +120,6 @@ services:
     build:
       context: .
       dockerfile: services/nlp-service/Dockerfile
-    container_name: rip-nlp-service
-    networks:
-      - rip-network
     environment:
       SERVICE_NAME: nlp-service
       PORT: "3003"
@@ -155,7 +147,6 @@ services:
     build:
       context: .
       dockerfile: services/integration-service/Dockerfile
-    container_name: rip-integration-service
     environment:
       <<: *node-env
       SERVICE_NAME: integration-service
@@ -166,8 +157,6 @@ services:
       WEBHOOK_RETRY_ATTEMPTS: ${WEBHOOK_RETRY_ATTEMPTS:-5}
       WEBHOOK_RETRY_BACKOFF_MS: ${WEBHOOK_RETRY_BACKOFF_MS:-1000}
       FHIR_SERVER_BASE: ${FHIR_SERVER_BASE:-}
-    ports:
-      - "${MLLP_PORT:-2575}:2575"
     depends_on:
       postgres:
         condition: service_healthy
@@ -188,14 +177,9 @@ services:
     build:
       context: .
       dockerfile: apps/review-ui/Dockerfile
-    container_name: rip-review-ui
-    ports:
-      - "${REVIEW_UI_PORT:-3005}:80"
-    networks:
-      - rip-network
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000/api/v1}
-      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3000/ws}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://radiology.5story.com/api/v1}
+      VITE_WS_URL: ${VITE_WS_URL:-wss://radiology.5story.com/ws}
       VITE_SESSION_TIMEOUT_MINUTES: ${VITE_SESSION_TIMEOUT_MINUTES:-15}
     depends_on:
       api-gateway:
@@ -212,10 +196,7 @@ services:
   # ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: rip-postgres
     restart: unless-stopped
-    networks:
-      - rip-network
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-rip}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rip_secret}
@@ -223,8 +204,6 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - pg_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rip} -d ${POSTGRES_DB:-radiology_platform}"]
       interval: 10s
@@ -247,10 +226,7 @@ services:
   # ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: rip-redis
     restart: unless-stopped
-    networks:
-      - rip-network
     command:
       - "redis-server"
       - "--requirepass"
@@ -265,8 +241,6 @@ services:
       - "allkeys-lru"
     volumes:
       - redis_data:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
       interval: 10s
@@ -279,10 +253,7 @@ services:
   # ─────────────────────────────────────────────
   minio:
     image: minio/minio:latest
-    container_name: rip-minio
     restart: unless-stopped
-    networks:
-      - rip-network
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -290,9 +261,6 @@ services:
       MINIO_SERVER_URL: ${MINIO_SERVER_URL:-http://minio:9000}
     volumes:
       - minio_data:/data
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -305,9 +273,6 @@ services:
   # ─────────────────────────────────────────────
   minio-init:
     image: minio/mc:latest
-    container_name: rip-minio-init
-    networks:
-      - rip-network
     depends_on:
       minio:
         condition: service_healthy
@@ -328,12 +293,7 @@ services:
   # ─────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.53.0
-    container_name: rip-prometheus
     restart: unless-stopped
-    networks:
-      - rip-network
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -360,12 +320,7 @@ services:
   # ─────────────────────────────────────────────
   grafana:
     image: grafana/grafana:11.1.0
-    container_name: rip-grafana
     restart: unless-stopped
-    networks:
-      - rip-network
-    ports:
-      - "${GRAFANA_PORT:-3100}:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -391,12 +346,7 @@ services:
   # ─────────────────────────────────────────────
   alertmanager:
     image: prom/alertmanager:v0.27.0
-    container_name: rip-alertmanager
     restart: unless-stopped
-    networks:
-      - rip-network
-    ports:
-      - "${ALERTMANAGER_PORT:-9093}:9093"
     volumes:
       - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     command:
@@ -408,11 +358,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
-
-networks:
-  rip-network:
-    driver: bridge
-    name: rip-network
 
 volumes:
   pg_data:
