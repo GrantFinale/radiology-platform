@@ -1,0 +1,5 @@
+Prerequisites: Docker (v20.10+) and Docker Compose (v2.0+)
+Extract:        tar xzf radiology-platform-*.tar.gz && cd radiology-platform
+Configure:      cp .env.example .env
+Start:          docker compose up --build -d
+Access:         UI at http://localhost:3005 | API at http://localhost:3000 | Grafana at http://localhost:3100 (admin/admin123)

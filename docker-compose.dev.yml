@@ -1,0 +1,209 @@
+version: "3.9"
+
+# Development overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+x-node-dev: &node-dev
+  environment: &node-dev-env
+    NODE_ENV: development
+    LOG_LEVEL: debug
+    LOG_FORMAT: pretty
+
+services:
+  # ─────────────────────────────────────────────
+  # API Gateway — dev mode with hot reload
+  # ─────────────────────────────────────────────
+  api-gateway:
+    <<: *node-dev
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+      target: development
+    environment:
+      <<: *node-dev-env
+      SERVICE_NAME: api-gateway
+      PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rip}:${POSTGRES_PASSWORD:-rip_secret}@postgres:5432/${POSTGRES_DB:-radiology_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: ${MINIO_BUCKET_DOCUMENTS:-documents}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      SERVICE_SECRET: ${SERVICE_SECRET:-dev-service-secret}
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.85}
+      ORDER_SERVICE_URL: http://order-service:3001
+      DOCUMENT_SERVICE_URL: http://document-service:3002
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX_REQUESTS: "1000"
+      CORS_ORIGIN: "http://localhost:3005"
+    volumes:
+      - ./services/api-gateway/src:/app/services/api-gateway/src:cached
+      - ./packages/shared/src:/app/packages/shared/src:cached
+    command: ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]
+
+  # ─────────────────────────────────────────────
+  # Order Service — dev mode with hot reload
+  # ─────────────────────────────────────────────
+  order-service:
+    <<: *node-dev
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+      target: development
+    environment:
+      <<: *node-dev-env
+      SERVICE_NAME: order-service
+      PORT: "3001"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rip}:${POSTGRES_PASSWORD:-rip_secret}@postgres:5432/${POSTGRES_DB:-radiology_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret}
+      MINIO_USE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      SERVICE_SECRET: ${SERVICE_SECRET:-dev-service-secret}
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.85}
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+    volumes:
+      - ./services/order-service/src:/app/services/order-service/src:cached
+      - ./packages/shared/src:/app/packages/shared/src:cached
+    command: ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]
+    ports:
+      - "3001:3001"
+
+  # ─────────────────────────────────────────────
+  # Document Service — dev mode with hot reload
+  # ─────────────────────────────────────────────
+  document-service:
+    <<: *node-dev
+    build:
+      context: .
+      dockerfile: services/document-service/Dockerfile
+      target: development
+    environment:
+      <<: *node-dev-env
+      SERVICE_NAME: document-service
+      PORT: "3002"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rip}:${POSTGRES_PASSWORD:-rip_secret}@postgres:5432/${POSTGRES_DB:-radiology_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: ${MINIO_BUCKET_DOCUMENTS:-documents}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      SERVICE_SECRET: ${SERVICE_SECRET:-dev-service-secret}
+      NLP_SERVICE_URL: http://nlp-service:3003
+      ORDER_SERVICE_URL: http://order-service:3001
+      OCR_CONCURRENCY: "1"
+      MAX_FILE_SIZE_MB: "50"
+      DOCUMENT_RETENTION_DAYS: "90"
+    volumes:
+      - ./services/document-service/src:/app/services/document-service/src:cached
+      - ./packages/shared/src:/app/packages/shared/src:cached
+    command: ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]
+    ports:
+      - "3002:3002"
+
+  # ─────────────────────────────────────────────
+  # NLP Service — dev mode with auto-reload
+  # ─────────────────────────────────────────────
+  nlp-service:
+    build:
+      context: .
+      dockerfile: services/nlp-service/Dockerfile
+      target: development
+    environment:
+      SERVICE_NAME: nlp-service
+      PORT: "3003"
+      LOG_LEVEL: debug
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MODEL_DIR: /app/models
+      SPACY_MODEL: ${SPACY_MODEL:-en_core_web_sm}
+      NLP_BATCH_SIZE: "5"
+      NLP_WORKERS: "1"
+    volumes:
+      - ./services/nlp-service/src:/app/src:cached
+      - ./services/nlp-service/models:/app/models:cached
+    command: ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "3003", "--reload"]
+    ports:
+      - "3003:3003"
+
+  # ─────────────────────────────────────────────
+  # Integration Service — dev mode with hot reload
+  # ─────────────────────────────────────────────
+  integration-service:
+    <<: *node-dev
+    build:
+      context: .
+      dockerfile: services/integration-service/Dockerfile
+      target: development
+    environment:
+      <<: *node-dev-env
+      SERVICE_NAME: integration-service
+      PORT: "3004"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rip}:${POSTGRES_PASSWORD:-rip_secret}@postgres:5432/${POSTGRES_DB:-radiology_platform}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret}
+      MINIO_USE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      SERVICE_SECRET: ${SERVICE_SECRET:-dev-service-secret}
+      ORDER_SERVICE_URL: http://order-service:3001
+      MLLP_LISTEN_PORT: "2575"
+      MLLP_TIMEOUT_MS: "30000"
+      WEBHOOK_RETRY_ATTEMPTS: "3"
+      WEBHOOK_RETRY_BACKOFF_MS: "1000"
+    volumes:
+      - ./services/integration-service/src:/app/services/integration-service/src:cached
+      - ./packages/shared/src:/app/packages/shared/src:cached
+    command: ["npx", "tsx", "watch", "--clear-screen=false", "src/index.ts"]
+    ports:
+      - "3004:3004"
+
+  # ─────────────────────────────────────────────
+  # Review UI — Vite dev server with HMR
+  # ─────────────────────────────────────────────
+  review-ui:
+    build:
+      context: .
+      dockerfile: apps/review-ui/Dockerfile
+      target: development
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000/api/v1
+      VITE_WS_URL: ws://localhost:3000/ws
+      VITE_SESSION_TIMEOUT_MINUTES: "60"
+    volumes:
+      - ./apps/review-ui/src:/app/apps/review-ui/src:cached
+      - ./apps/review-ui/public:/app/apps/review-ui/public:cached
+      - ./apps/review-ui/index.html:/app/apps/review-ui/index.html:cached
+    command: ["npx", "vite", "--host", "0.0.0.0", "--port", "3005"]
+    ports:
+      - "3005:3005"
+
+  # ─────────────────────────────────────────────
+  # Infrastructure — expose ports for dev tools
+  # ─────────────────────────────────────────────
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"

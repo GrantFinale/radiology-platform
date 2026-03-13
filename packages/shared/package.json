@@ -1,0 +1,41 @@
+{
+  "name": "@radiology-platform/shared",
+  "version": "1.0.0",
+  "description": "Shared types, utilities, and constants for the Radiology Interoperability Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "lint": "eslint src --ext .ts",
+    "test": "node --import tsx --test src/__tests__/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "radiology",
+    "hl7",
+    "fhir",
+    "healthcare",
+    "interoperability"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}

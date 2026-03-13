@@ -1,0 +1,427 @@
+version: "3.9"
+
+x-node-base: &node-base
+  restart: unless-stopped
+  networks:
+    - rip-network
+  environment: &node-env
+    NODE_ENV: production
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    LOG_FORMAT: json
+    DATABASE_URL: postgresql://${POSTGRES_USER:-rip}:${POSTGRES_PASSWORD:-rip_secret}@postgres:5432/${POSTGRES_DB:-radiology_platform}
+    REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+    MINIO_ENDPOINT: minio
+    MINIO_PORT: "9000"
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret}
+    MINIO_USE_SSL: "false"
+    MINIO_BUCKET_DOCUMENTS: ${MINIO_BUCKET_DOCUMENTS:-documents}
+    MINIO_BUCKET_BACKUPS: ${MINIO_BUCKET_BACKUPS:-backups}
+    JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    JWT_EXPIRY: ${JWT_EXPIRY:-1h}
+    SERVICE_SECRET: ${SERVICE_SECRET:-inter-service-secret}
+    CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.85}
+    REVIEW_SLA_HOURS: ${REVIEW_SLA_HOURS:-4}
+
+services:
+  # ─────────────────────────────────────────────
+  # API Gateway
+  # ─────────────────────────────────────────────
+  api-gateway:
+    <<: *node-base
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: rip-api-gateway
+    ports:
+      - "${API_GATEWAY_PORT:-3000}:3000"
+    environment:
+      <<: *node-env
+      SERVICE_NAME: api-gateway
+      PORT: "3000"
+      ORDER_SERVICE_URL: http://order-service:3001
+      DOCUMENT_SERVICE_URL: http://document-service:3002
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Order Service
+  # ─────────────────────────────────────────────
+  order-service:
+    <<: *node-base
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    container_name: rip-order-service
+    environment:
+      <<: *node-env
+      SERVICE_NAME: order-service
+      PORT: "3001"
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Document Service
+  # ─────────────────────────────────────────────
+  document-service:
+    <<: *node-base
+    build:
+      context: .
+      dockerfile: services/document-service/Dockerfile
+    container_name: rip-document-service
+    environment:
+      <<: *node-env
+      SERVICE_NAME: document-service
+      PORT: "3002"
+      NLP_SERVICE_URL: http://nlp-service:3003
+      ORDER_SERVICE_URL: http://order-service:3001
+      OCR_CONCURRENCY: ${OCR_CONCURRENCY:-2}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-50}
+      DOCUMENT_RETENTION_DAYS: ${DOCUMENT_RETENTION_DAYS:-90}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # NLP Service (Python)
+  # ─────────────────────────────────────────────
+  nlp-service:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: services/nlp-service/Dockerfile
+    container_name: rip-nlp-service
+    networks:
+      - rip-network
+    environment:
+      SERVICE_NAME: nlp-service
+      PORT: "3003"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
+      MODEL_DIR: /app/models
+      SPACY_MODEL: ${SPACY_MODEL:-en_core_web_lg}
+      NLP_BATCH_SIZE: ${NLP_BATCH_SIZE:-10}
+      NLP_WORKERS: ${NLP_WORKERS:-2}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────
+  # Integration Service
+  # ─────────────────────────────────────────────
+  integration-service:
+    <<: *node-base
+    build:
+      context: .
+      dockerfile: services/integration-service/Dockerfile
+    container_name: rip-integration-service
+    environment:
+      <<: *node-env
+      SERVICE_NAME: integration-service
+      PORT: "3004"
+      ORDER_SERVICE_URL: http://order-service:3001
+      MLLP_LISTEN_PORT: "2575"
+      MLLP_TIMEOUT_MS: ${MLLP_TIMEOUT_MS:-30000}
+      WEBHOOK_RETRY_ATTEMPTS: ${WEBHOOK_RETRY_ATTEMPTS:-5}
+      WEBHOOK_RETRY_BACKOFF_MS: ${WEBHOOK_RETRY_BACKOFF_MS:-1000}
+      FHIR_SERVER_BASE: ${FHIR_SERVER_BASE:-}
+    ports:
+      - "${MLLP_PORT:-2575}:2575"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3004/health').then(r => process.exit(r.ok ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Review UI (React)
+  # ─────────────────────────────────────────────
+  review-ui:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: apps/review-ui/Dockerfile
+    container_name: rip-review-ui
+    ports:
+      - "${REVIEW_UI_PORT:-3005}:80"
+    networks:
+      - rip-network
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000/api/v1}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3000/ws}
+      VITE_SESSION_TIMEOUT_MINUTES: ${VITE_SESSION_TIMEOUT_MINUTES:-15}
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # PostgreSQL
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: rip-postgres
+    restart: unless-stopped
+    networks:
+      - rip-network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rip_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-radiology_platform}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rip} -d ${POSTGRES_DB:-radiology_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "log_statement=mod"
+      - "-c"
+      - "log_min_duration_statement=1000"
+
+  # ─────────────────────────────────────────────
+  # Redis
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: rip-redis
+    restart: unless-stopped
+    networks:
+      - rip-network
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-redis_secret}"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--maxmemory"
+      - "${REDIS_MAX_MEMORY:-512mb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ─────────────────────────────────────────────
+  # MinIO (S3-compatible object storage)
+  # ─────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: rip-minio
+    restart: unless-stopped
+    networks:
+      - rip-network
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_secret}
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL:-http://minio:9000}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # MinIO Init (create default buckets)
+  # ─────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: rip-minio-init
+    networks:
+      - rip-network
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set ripminio http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minio_secret};
+        mc mb --ignore-existing ripminio/${MINIO_BUCKET_DOCUMENTS:-documents};
+        mc mb --ignore-existing ripminio/${MINIO_BUCKET_BACKUPS:-backups};
+        mc anonymous set none ripminio/${MINIO_BUCKET_DOCUMENTS:-documents};
+        mc anonymous set none ripminio/${MINIO_BUCKET_BACKUPS:-backups};
+        mc ilm rule add --expire-days ${DOCUMENT_RETENTION_DAYS:-90} ripminio/${MINIO_BUCKET_DOCUMENTS:-documents} || true;
+        echo 'MinIO initialization complete';
+      "
+    restart: "no"
+
+  # ─────────────────────────────────────────────
+  # Prometheus
+  # ─────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: rip-prometheus
+    restart: unless-stopped
+    networks:
+      - rip-network
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  # Grafana
+  # ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: rip-grafana
+    restart: unless-stopped
+    networks:
+      - rip-network
+    ports:
+      - "${GRAFANA_PORT:-3100}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
+    volumes:
+      - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Alertmanager
+  # ─────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: rip-alertmanager
+    restart: unless-stopped
+    networks:
+      - rip-network
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  rip-network:
+    driver: bridge
+    name: rip-network
+
+volumes:
+  pg_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

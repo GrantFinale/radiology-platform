@@ -1,0 +1,90 @@
+groups:
+  # ─────────────────────────────────────────────
+  # Service Health
+  # ─────────────────────────────────────────────
+  - name: service_health
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been unreachable for more than 1 minute."
+
+  # ─────────────────────────────────────────────
+  # HTTP Error Rate
+  # ─────────────────────────────────────────────
+  - name: http_errors
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(rip_http_requests_total{status_code=~"5.."}[5m])) by (job)
+            /
+            sum(rate(rip_http_requests_total[5m])) by (job)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP error rate on {{ $labels.job }}"
+          description: >-
+            More than 5% of requests to {{ $labels.job }} are returning 5xx
+            errors over the last 5 minutes. Current value: {{ $value | humanizePercentage }}.
+
+  # ─────────────────────────────────────────────
+  # Latency
+  # ─────────────────────────────────────────────
+  - name: latency
+    rules:
+      - alert: SlowProcessing
+        expr: |
+          histogram_quantile(0.95, sum(rate(rip_http_request_duration_seconds_bucket[5m])) by (le, job))
+          > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow request processing on {{ $labels.job }}"
+          description: >-
+            The p95 request latency for {{ $labels.job }} exceeds 10 seconds
+            over the last 5 minutes. Current p95: {{ $value | humanizeDuration }}.
+
+  # ─────────────────────────────────────────────
+  # Queue Backup
+  # ─────────────────────────────────────────────
+  - name: queue_health
+    rules:
+      - alert: QueueBackup
+        expr: rip_queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue backup detected on {{ $labels.queue }}"
+          description: >-
+            Queue {{ $labels.queue }} has more than 100 items pending for
+            over 5 minutes. Current depth: {{ $value }}.
+
+  # ─────────────────────────────────────────────
+  # OCR Quality
+  # ─────────────────────────────────────────────
+  - name: ocr_quality
+    rules:
+      - alert: LowOCRConfidence
+        expr: |
+          (
+            rate(rip_ocr_confidence_sum[10m])
+            /
+            rate(rip_ocr_confidence_count[10m])
+          ) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low average OCR confidence"
+          description: >-
+            The average OCR confidence score has dropped below 0.5 over the
+            last 10 minutes. Current average: {{ $value }}.

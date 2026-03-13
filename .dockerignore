@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build output
+**/dist
+**/build
+**/coverage
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs/
+ARCHITECTURE.md
+
+# Testing
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+
+# Docker
+docker-compose*.yml
+Makefile
+
+# Python cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.egg-info
+
+# Logs
+logs/
+**/*.log
+
+# Temporary files
+tmp/
+temp/
