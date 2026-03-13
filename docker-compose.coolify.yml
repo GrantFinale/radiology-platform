@@ -1,0 +1,216 @@
+services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SERVICE_NAME: api-gateway
+      PORT: "3000"
+      DATABASE_URL: postgresql://rip:rip_secret@postgres:5432/radiology_platform
+      REDIS_URL: redis://:redis_secret@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minio_secret
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_BACKUPS: backups
+      JWT_SECRET: radiology-jwt-secret-2026
+      JWT_EXPIRY: 1h
+      SERVICE_SECRET: inter-service-secret
+      CONFIDENCE_THRESHOLD: "0.85"
+      REVIEW_SLA_HOURS: "4"
+      ORDER_SERVICE_URL: http://order-service:3001
+      DOCUMENT_SERVICE_URL: http://document-service:3002
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX_REQUESTS: "100"
+      CORS_ORIGIN: https://radiology.5story.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SERVICE_NAME: order-service
+      PORT: "3001"
+      DATABASE_URL: postgresql://rip:rip_secret@postgres:5432/radiology_platform
+      REDIS_URL: redis://:redis_secret@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minio_secret
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_BACKUPS: backups
+      JWT_SECRET: radiology-jwt-secret-2026
+      JWT_EXPIRY: 1h
+      SERVICE_SECRET: inter-service-secret
+      CONFIDENCE_THRESHOLD: "0.85"
+      REVIEW_SLA_HOURS: "4"
+      NLP_SERVICE_URL: http://nlp-service:3003
+      INTEGRATION_SERVICE_URL: http://integration-service:3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  document-service:
+    build:
+      context: .
+      dockerfile: services/document-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SERVICE_NAME: document-service
+      PORT: "3002"
+      DATABASE_URL: postgresql://rip:rip_secret@postgres:5432/radiology_platform
+      REDIS_URL: redis://:redis_secret@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minio_secret
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_BACKUPS: backups
+      JWT_SECRET: radiology-jwt-secret-2026
+      JWT_EXPIRY: 1h
+      SERVICE_SECRET: inter-service-secret
+      CONFIDENCE_THRESHOLD: "0.85"
+      REVIEW_SLA_HOURS: "4"
+      NLP_SERVICE_URL: http://nlp-service:3003
+      ORDER_SERVICE_URL: http://order-service:3001
+      OCR_CONCURRENCY: "2"
+      MAX_FILE_SIZE_MB: "50"
+      DOCUMENT_RETENTION_DAYS: "90"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  nlp-service:
+    build:
+      context: .
+      dockerfile: services/nlp-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: nlp-service
+      PORT: "3003"
+      LOG_LEVEL: info
+      REDIS_URL: redis://:redis_secret@redis:6379/0
+      MODEL_DIR: /app/models
+      SPACY_MODEL: en_core_web_sm
+      NLP_BATCH_SIZE: "10"
+      NLP_WORKERS: "2"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  integration-service:
+    build:
+      context: .
+      dockerfile: services/integration-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SERVICE_NAME: integration-service
+      PORT: "3004"
+      DATABASE_URL: postgresql://rip:rip_secret@postgres:5432/radiology_platform
+      REDIS_URL: redis://:redis_secret@redis:6379/0
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minio_secret
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_BACKUPS: backups
+      JWT_SECRET: radiology-jwt-secret-2026
+      JWT_EXPIRY: 1h
+      SERVICE_SECRET: inter-service-secret
+      CONFIDENCE_THRESHOLD: "0.85"
+      REVIEW_SLA_HOURS: "4"
+      ORDER_SERVICE_URL: http://order-service:3001
+      MLLP_LISTEN_PORT: "2575"
+      MLLP_TIMEOUT_MS: "30000"
+      WEBHOOK_RETRY_ATTEMPTS: "5"
+      WEBHOOK_RETRY_BACKOFF_MS: "1000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rip
+      POSTGRES_PASSWORD: rip_secret
+      POSTGRES_DB: radiology_platform
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rip -d radiology_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass redis_secret --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minio_secret
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
