@@ -36,11 +36,11 @@ function createProxy(target: string, pathRewrite?: Record<string, string>): any 
   return createProxyMiddleware(options);
 }
 
-// Order service
+// Order service — strip /api prefix so /api/orders/stats → /orders/stats
 router.use(
   '/orders',
   createProxy(config.services.orderService, {
-    '^/api/orders': '/api/orders',
+    '^/api/orders': '/orders',
   })
 );
 
@@ -48,7 +48,7 @@ router.use(
 router.use(
   '/reviews',
   createProxy(config.services.orderService, {
-    '^/api/reviews': '/api/reviews',
+    '^/api/reviews': '/reviews',
   })
 );
 
@@ -56,7 +56,7 @@ router.use(
 router.use(
   '/documents',
   createProxy(config.services.documentService, {
-    '^/api/documents': '/api/documents',
+    '^/api/documents': '/documents',
   })
 );
 
@@ -64,7 +64,7 @@ router.use(
 router.use(
   '/nlp',
   createProxy(config.services.nlpService, {
-    '^/api/nlp': '/api/nlp',
+    '^/api/nlp': '/nlp',
   })
 );
 
@@ -72,7 +72,7 @@ router.use(
 router.use(
   '/integrations',
   createProxy(config.services.integrationService, {
-    '^/api/integrations': '/api/integrations',
+    '^/api/integrations': '/integrations',
   })
 );
 

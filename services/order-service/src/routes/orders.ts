@@ -40,13 +40,16 @@ const TransitionSchema = z.object({
 });
 
 const ListOrdersSchema = z.object({
-  status: z.nativeEnum(OrderStatus).optional(),
+  status: z.string().optional(),
   patientId: z.string().uuid().optional(),
   providerId: z.string().uuid().optional(),
   source: z.string().optional(),
-  priority: z.enum(['STAT', 'URGENT', 'ROUTINE']).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  priority: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  search: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
@@ -55,7 +58,7 @@ const ListOrdersSchema = z.object({
 router.get('/stats', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await orderService.getOrderStats();
-    res.json({ data: stats });
+    res.json(stats);
   } catch (err) {
     next(err);
   }
@@ -79,12 +82,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const result = await orderService.searchOrders(filters);
     res.json({
       data: result.orders,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: Math.ceil(result.total / result.limit),
-      },
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: Math.ceil(result.total / result.limit),
     });
   } catch (err) {
     next(err);

@@ -190,40 +190,125 @@ export async function getOrderWithDetails(id: string): Promise<Record<string, un
   };
 }
 
+// Maps backend DB status values to frontend lowercase status values
+const STATUS_TO_FRONTEND: Record<string, string> = {
+  'RECEIVED': 'received',
+  'DOCUMENT_PROCESSING': 'processing',
+  'INTERPRETED': 'ocr_complete',
+  'NORMALIZED': 'nlp_complete',
+  'VALIDATED': 'validated',
+  'REVIEW_REQUIRED': 'pending_review',
+  'SCHEDULED': 'approved',
+  'COMPLETED': 'approved',
+  'REJECTED': 'rejected',
+  'ERROR': 'error',
+};
+
+// Maps frontend lowercase status values back to DB enum values
+const STATUS_FROM_FRONTEND: Record<string, string> = {
+  'received': 'RECEIVED',
+  'processing': 'DOCUMENT_PROCESSING',
+  'ocr_complete': 'INTERPRETED',
+  'nlp_complete': 'NORMALIZED',
+  'validated': 'VALIDATED',
+  'pending_review': 'REVIEW_REQUIRED',
+  'approved': 'SCHEDULED',
+  'rejected': 'REJECTED',
+  'error': 'ERROR',
+};
+
+// Maps backend DB source values to frontend lowercase source values
+const SOURCE_TO_FRONTEND: Record<string, string> = {
+  'FAX': 'fax',
+  'SCANNED_PDF': 'fax',
+  'HANDWRITTEN': 'fax',
+  'HL7': 'hl7',
+  'FHIR': 'hl7',
+  'EMR': 'ehr',
+  'EMAIL': 'portal',
+  'MANUAL': 'portal',
+};
+
+// Maps frontend lowercase source values back to DB enum values
+const SOURCE_FROM_FRONTEND: Record<string, string> = {
+  'fax': 'FAX',
+  'hl7': 'HL7',
+  'portal': 'MANUAL',
+  'ehr': 'EMR',
+};
+
+export interface FrontendOrder {
+  id: string;
+  patientName: string;
+  patientMrn: string;
+  dateOfBirth: string;
+  provider: string;
+  orderDate: string;
+  examType: string;
+  source: string;
+  status: string;
+  priority: string;
+  confidenceScore: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SearchOrdersFilters extends OrderFilters {
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
 export async function searchOrders(
-  filters: OrderFilters,
-): Promise<{ orders: OrderRecord[]; total: number; page: number; limit: number }> {
+  filters: SearchOrdersFilters,
+): Promise<{ orders: FrontendOrder[]; total: number; page: number; limit: number }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
   let paramIndex = 1;
 
   if (filters.status) {
-    conditions.push(`status = $${paramIndex++}`);
-    params.push(filters.status);
+    // Convert frontend lowercase status to DB enum value
+    const dbStatus = STATUS_FROM_FRONTEND[filters.status as string] ?? (filters.status as string);
+    conditions.push(`o.status = $${paramIndex++}`);
+    params.push(dbStatus);
   }
   if (filters.patientId) {
-    conditions.push(`patient_id = $${paramIndex++}`);
+    conditions.push(`o.patient_id = $${paramIndex++}`);
     params.push(filters.patientId);
   }
   if (filters.providerId) {
-    conditions.push(`provider_id = $${paramIndex++}`);
+    conditions.push(`o.ordering_provider_id = $${paramIndex++}`);
     params.push(filters.providerId);
   }
   if (filters.source) {
-    conditions.push(`source = $${paramIndex++}`);
-    params.push(filters.source);
+    // Convert frontend lowercase source to DB enum value
+    const dbSource = SOURCE_FROM_FRONTEND[filters.source as string] ?? (filters.source as string);
+    conditions.push(`o.source = $${paramIndex++}`);
+    params.push(dbSource);
   }
   if (filters.priority) {
-    conditions.push(`priority = $${paramIndex++}`);
-    params.push(filters.priority);
+    conditions.push(`o.priority = $${paramIndex++}`);
+    params.push((filters.priority as string).toUpperCase());
   }
   if (filters.dateFrom) {
-    conditions.push(`created_at >= $${paramIndex++}`);
+    conditions.push(`o.created_at >= $${paramIndex++}`);
     params.push(filters.dateFrom);
   }
   if (filters.dateTo) {
-    conditions.push(`created_at <= $${paramIndex++}`);
+    conditions.push(`o.created_at <= $${paramIndex++}`);
     params.push(filters.dateTo);
+  }
+  if (filters.search) {
+    conditions.push(`(
+      p.first_name ILIKE $${paramIndex} OR
+      p.last_name ILIKE $${paramIndex} OR
+      p.mrn ILIKE $${paramIndex} OR
+      o.cpt_description ILIKE $${paramIndex} OR
+      CONCAT(p.first_name, ' ', p.last_name) ILIKE $${paramIndex} OR
+      CONCAT(prov.first_name, ' ', prov.last_name) ILIKE $${paramIndex}
+    )`);
+    params.push(`%${filters.search}%`);
+    paramIndex++;
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -231,20 +316,75 @@ export async function searchOrders(
   const limit = Math.min(filters.limit ?? 25, 100);
   const offset = (page - 1) * limit;
 
+  // Map frontend sortBy field names to DB columns
+  const sortByMap: Record<string, string> = {
+    patientName: 'p.last_name',
+    orderDate: 'o.created_at',
+    examType: 'o.cpt_description',
+    status: 'o.status',
+    priority: 'o.priority',
+    source: 'o.source',
+    provider: 'prov.last_name',
+    createdAt: 'o.created_at',
+    updatedAt: 'o.updated_at',
+    confidenceScore: 'o.confidence_score',
+  };
+  const sortColumn = (filters.sortBy && sortByMap[filters.sortBy]) || 'o.created_at';
+  const sortDirection = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+  const fromClause = `
+    FROM orders o
+    JOIN patients p ON o.patient_id = p.id
+    JOIN providers prov ON o.ordering_provider_id = prov.id
+  `;
+
   const countResult = await pool.query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM orders ${whereClause}`,
+    `SELECT COUNT(*) as count ${fromClause} ${whereClause}`,
     params,
   );
 
   const total = parseInt(countResult.rows[0].count, 10);
 
-  const dataResult = await pool.query<OrderRecord>(
-    `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+  const dataResult = await pool.query(
+    `SELECT
+      o.id,
+      CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+      p.mrn AS patient_mrn,
+      p.date_of_birth,
+      CONCAT(prov.first_name, ' ', prov.last_name) AS provider_name,
+      o.created_at AS order_date,
+      COALESCE(o.cpt_description, o.cpt_code) AS exam_type,
+      o.source,
+      o.status,
+      o.priority,
+      o.confidence_score,
+      o.created_at,
+      o.updated_at
+    ${fromClause}
+    ${whereClause}
+    ORDER BY ${sortColumn} ${sortDirection}
+    LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
     [...params, limit, offset],
   );
 
+  const orders: FrontendOrder[] = dataResult.rows.map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    patientName: row.patient_name as string,
+    patientMrn: row.patient_mrn as string,
+    dateOfBirth: row.date_of_birth as string,
+    provider: row.provider_name as string,
+    orderDate: row.order_date as string,
+    examType: row.exam_type as string,
+    source: SOURCE_TO_FRONTEND[row.source as string] ?? (row.source as string).toLowerCase(),
+    status: STATUS_TO_FRONTEND[row.status as string] ?? (row.status as string).toLowerCase(),
+    priority: (row.priority as string).toLowerCase(),
+    confidenceScore: row.confidence_score as number | null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }));
+
   return {
-    orders: dataResult.rows,
+    orders,
     total,
     page,
     limit,
@@ -315,20 +455,28 @@ export async function getOrderHistory(
 }
 
 export async function getOrderStats(): Promise<Record<string, unknown>> {
-  const [statusCounts, priorityCounts, sourceCounts, recentCount] = await Promise.all([
+  const [statusCounts, sourceCounts] = await Promise.all([
     pool.query('SELECT status, COUNT(*) as count FROM orders GROUP BY status'),
-    pool.query('SELECT priority, COUNT(*) as count FROM orders GROUP BY priority'),
     pool.query('SELECT source, COUNT(*) as count FROM orders GROUP BY source'),
-    pool.query("SELECT COUNT(*) as count FROM orders WHERE created_at >= NOW() - INTERVAL '24 hours'"),
   ]);
 
-  return {
-    byStatus: Object.fromEntries(statusCounts.rows.map((r: Record<string, unknown>) => [r.status, parseInt(r.count as string, 10)])),
-    byPriority: Object.fromEntries(priorityCounts.rows.map((r: Record<string, unknown>) => [r.priority, parseInt(r.count as string, 10)])),
-    bySource: Object.fromEntries(sourceCounts.rows.map((r: Record<string, unknown>) => [r.source, parseInt(r.count as string, 10)])),
-    last24Hours: parseInt(recentCount.rows[0].count as string, 10),
-    total: statusCounts.rows.reduce((sum: number, r: Record<string, unknown>) => sum + parseInt(r.count as string, 10), 0),
-  };
+  const statusMap = new Map<string, number>();
+  for (const r of statusCounts.rows) {
+    statusMap.set((r.status as string).toLowerCase(), parseInt(r.count as string, 10));
+  }
+
+  const total = [...statusMap.values()].reduce((sum, c) => sum + c, 0);
+  const pendingReview = (statusMap.get('review_required') ?? 0) + (statusMap.get('pending_review') ?? 0);
+  const validated = statusMap.get('validated') ?? 0;
+  const errors = statusMap.get('error') ?? 0;
+
+  const byStatus = [...statusMap.entries()].map(([status, count]) => ({ status, count }));
+  const bySource = sourceCounts.rows.map((r: Record<string, unknown>) => ({
+    source: (r.source as string).toLowerCase(),
+    count: parseInt(r.count as string, 10),
+  }));
+
+  return { total, pendingReview, validated, errors, bySource, byStatus };
 }
 
 async function recordStatusHistory(
