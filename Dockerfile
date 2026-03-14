@@ -29,12 +29,22 @@ COPY services/integration-service/tsconfig.json services/integration-service/
 
 # Copy review-ui package.json (needed for workspace resolution)
 COPY apps/review-ui/package.json apps/review-ui/
+COPY apps/review-ui/tsconfig.json apps/review-ui/
+COPY apps/review-ui/vite.config.ts apps/review-ui/
+COPY apps/review-ui/tailwind.config.js apps/review-ui/
+COPY apps/review-ui/postcss.config.js apps/review-ui/
+COPY apps/review-ui/index.html apps/review-ui/
+COPY apps/review-ui/src apps/review-ui/src
+COPY apps/review-ui/public apps/review-ui/public
 
 # Install all workspace dependencies
 RUN npm ci --include-workspace-root
 
 # Build shared package
 RUN npm run build -w packages/shared
+
+# Build review-ui
+RUN npm run build -w apps/review-ui
 
 # Copy all service source code and static assets
 COPY services/api-gateway/public services/api-gateway/public

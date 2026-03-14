@@ -151,6 +151,24 @@ footer a{color:var(--cyan);text-decoration:none;transition:opacity .2s}
 footer a:hover{opacity:.7}
 footer .footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:12px}
 
+/* ─── LAUNCH BUTTON ─── */
+.launch-btn{
+  display:inline-block;margin-top:24px;margin-bottom:32px;
+  padding:14px 36px;
+  font-family:var(--font-display);font-size:14px;font-weight:600;
+  letter-spacing:3px;text-transform:uppercase;text-decoration:none;
+  color:var(--cyan);background:rgba(0,240,255,.1);
+  border:1px solid var(--cyan);border-radius:6px;
+  box-shadow:0 0 12px rgba(0,240,255,.15),inset 0 0 12px rgba(0,240,255,.05);
+  transition:background .3s,box-shadow .3s,transform .2s;
+}
+.launch-btn:hover{
+  background:rgba(0,240,255,.2);
+  box-shadow:0 0 24px rgba(0,240,255,.35),inset 0 0 20px rgba(0,240,255,.1);
+  transform:translateY(-2px);
+}
+.launch-btn:active{transform:translateY(0)}
+
 /* Divider */
 .divider{width:60px;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);margin:0 auto 48px;opacity:.4}
 </style>
@@ -166,6 +184,7 @@ footer .footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:
   </div>
   <h1>Radiology<br>Interoperability<br>Platform</h1>
   <p class="tagline">Automating radiology order intake, interpretation, and fulfillment</p>
+  <a href="/app" class="launch-btn">LAUNCH APP &rarr;</a>
   <div class="hero-status">
     <div class="stat">
       <span class="stat-label">Services</span>
@@ -364,6 +383,7 @@ footer .footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:
 <footer>
   <div class="container">
     <div class="footer-links">
+      <a href="/app">Launch App</a>
       <a href="https://5story.com" target="_blank" rel="noopener">5story.com</a>
       <a href="https://github.com/5story" target="_blank" rel="noopener">GitHub</a>
     </div>

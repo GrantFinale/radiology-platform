@@ -65,6 +65,12 @@ app.use(apiRateLimiter);
 // Serve static landing page
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Serve review-ui SPA at /app
+app.use('/app', express.static(path.join(__dirname, '..', '..', '..', 'apps', 'review-ui', 'dist')));
+app.get('/app/*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', '..', '..', 'apps', 'review-ui', 'dist', 'index.html'));
+});
+
 // Health check (before auth)
 app.use('/health', healthRoutes);
 
