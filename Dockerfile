@@ -35,7 +35,6 @@ COPY apps/review-ui/tailwind.config.js apps/review-ui/
 COPY apps/review-ui/postcss.config.js apps/review-ui/
 COPY apps/review-ui/index.html apps/review-ui/
 COPY apps/review-ui/src apps/review-ui/src
-COPY apps/review-ui/public apps/review-ui/public
 
 # Install all workspace dependencies
 RUN npm ci --include-workspace-root
