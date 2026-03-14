@@ -32,21 +32,22 @@ app.use('/documents', documentRoutes);
 
 // Health check
 app.get('/health', async (_req: Request, res: Response) => {
+  let queueStats = null;
   try {
-    const queueStats = await getQueueStats();
-    res.json({
-      status: 'healthy',
-      service: 'document-service',
-      timestamp: new Date().toISOString(),
-      queue: queueStats,
-    });
+    // Timeout queue stats check to avoid hanging when Redis is unavailable
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 2000)
+    );
+    queueStats = await Promise.race([getQueueStats(), timeoutPromise]);
   } catch {
-    res.json({
-      status: 'healthy',
-      service: 'document-service',
-      timestamp: new Date().toISOString(),
-    });
+    // Queue not available, that's OK
   }
+  res.json({
+    status: 'healthy',
+    service: 'document-service',
+    timestamp: new Date().toISOString(),
+    ...(queueStats ? { queue: queueStats } : {}),
+  });
 });
 
 // Readiness check

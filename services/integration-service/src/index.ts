@@ -38,7 +38,10 @@ app.use(
 app.get('/health', async (_req, res) => {
   let queueStats = null;
   try {
-    queueStats = await getQueueStats();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 2000)
+    );
+    queueStats = await Promise.race([getQueueStats(), timeoutPromise]);
   } catch {
     // Queue may not be available
   }
@@ -49,7 +52,7 @@ app.get('/health', async (_req, res) => {
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     adapters: EMRAdapterFactory.getRegisteredTypes(),
-    queue: queueStats,
+    ...(queueStats ? { queue: queueStats } : {}),
   });
 });
 
