@@ -36,7 +36,8 @@ RUN npm ci --include-workspace-root
 # Build shared package
 RUN npm run build -w packages/shared
 
-# Copy all service source code
+# Copy all service source code and static assets
+COPY services/api-gateway/public services/api-gateway/public
 COPY services/api-gateway/src services/api-gateway/src
 COPY services/order-service/src services/order-service/src
 COPY services/document-service/src services/document-service/src

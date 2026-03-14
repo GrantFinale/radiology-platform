@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radiology Interoperability Platform — 5 Story Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Orbitron:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050508;--bg2:#0a0a10;--bg3:#0f0f18;--bg4:#141420;
+  --cyan:#00f0ff;--cyan-dim:rgba(0,240,255,.15);--cyan-glow:rgba(0,240,255,.4);
+  --green:#00ff88;--red:#ff3355;--yellow:#ffcc00;--white:#e8e8ef;--gray:#6a6a80;
+  --font-mono:'JetBrains Mono',monospace;--font-display:'Orbitron',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--white);font-family:var(--font-mono);line-height:1.6;overflow-x:hidden}
+
+/* Scanline overlay */
+body::after{
+  content:'';position:fixed;top:0;left:0;width:100%;height:100%;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,240,255,.015) 2px,rgba(0,240,255,.015) 4px);
+  pointer-events:none;z-index:9999;
+}
+
+/* Particle canvas */
+#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+.container{max-width:1200px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+/* ─── HERO ─── */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 24px 60px}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;padding:6px 16px;
+  border:1px solid rgba(0,240,255,.25);border-radius:100px;
+  font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--cyan);
+  margin-bottom:32px;background:rgba(0,240,255,.05);
+}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 4px var(--green)}50%{opacity:.4;box-shadow:0 0 8px var(--green)}}
+.hero h1{
+  font-family:var(--font-display);font-size:clamp(28px,5vw,56px);font-weight:700;
+  letter-spacing:2px;line-height:1.15;margin-bottom:20px;
+  background:linear-gradient(135deg,var(--white) 0%,var(--cyan) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  text-shadow:none;filter:drop-shadow(0 0 30px rgba(0,240,255,.2));
+}
+.hero .tagline{font-size:clamp(14px,2vw,18px);color:var(--gray);max-width:600px;margin:0 auto 40px;font-weight:300}
+.hero-status{
+  display:flex;gap:24px;flex-wrap:wrap;justify-content:center;
+  padding:16px 28px;border:1px solid var(--cyan-dim);border-radius:8px;background:rgba(0,240,255,.03);
+}
+.hero-status .stat{display:flex;flex-direction:column;align-items:center;gap:4px}
+.hero-status .stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray)}
+.hero-status .stat-value{font-size:14px;color:var(--cyan);font-weight:500}
+.scroll-hint{margin-top:60px;animation:float 3s ease-in-out infinite}
+.scroll-hint svg{width:24px;height:24px;stroke:var(--gray);stroke-width:1.5}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+
+/* ─── SECTIONS ─── */
+section{padding:100px 0}
+.section-label{
+  font-size:10px;text-transform:uppercase;letter-spacing:3px;color:var(--cyan);
+  margin-bottom:12px;font-family:var(--font-display);
+}
+.section-title{font-family:var(--font-display);font-size:clamp(20px,3vw,32px);font-weight:600;margin-bottom:48px;letter-spacing:1px}
+
+/* ─── SYSTEM STATUS ─── */
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.status-card{
+  background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:8px;
+  padding:20px 24px;display:flex;align-items:center;gap:16px;
+  transition:border-color .3s,box-shadow .3s;
+}
+.status-card:hover{border-color:var(--cyan-dim);box-shadow:0 0 20px rgba(0,240,255,.05)}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--gray);transition:background .3s,box-shadow .3s}
+.status-dot.up{background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.5)}
+.status-dot.down{background:var(--red);box-shadow:0 0 8px rgba(255,51,85,.5)}
+.status-dot.loading{animation:pulse-dot 1s ease-in-out infinite;background:var(--yellow)}
+.status-info{flex:1}
+.status-name{font-size:13px;font-weight:500;margin-bottom:2px}
+.status-meta{font-size:11px;color:var(--gray)}
+.status-latency{font-size:12px;color:var(--cyan);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* ─── CAPABILITIES ─── */
+.cap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.cap-card{
+  background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:8px;
+  padding:28px;transition:border-color .3s,transform .2s,box-shadow .3s;
+}
+.cap-card:hover{border-color:rgba(0,240,255,.2);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.cap-icon{font-size:28px;margin-bottom:16px;display:block}
+.cap-card h3{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:10px;letter-spacing:.5px}
+.cap-card p{font-size:13px;color:var(--gray);line-height:1.7}
+.cap-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.cap-tag{
+  font-size:10px;padding:3px 10px;border-radius:100px;
+  background:rgba(0,240,255,.06);border:1px solid rgba(0,240,255,.12);color:var(--cyan);
+  letter-spacing:.5px;
+}
+
+/* ─── ARCHITECTURE ─── */
+.arch-flow{
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:0;
+  padding:40px 0;
+}
+.arch-node{
+  background:var(--bg3);border:1px solid rgba(255,255,255,.08);border-radius:8px;
+  padding:16px 20px;text-align:center;min-width:120px;
+  transition:border-color .3s,box-shadow .3s;
+}
+.arch-node:hover{border-color:var(--cyan-dim);box-shadow:0 0 20px rgba(0,240,255,.08)}
+.arch-node .node-icon{font-size:22px;display:block;margin-bottom:8px}
+.arch-node .node-label{font-size:11px;font-weight:500;letter-spacing:.5px}
+.arch-arrow{
+  color:var(--cyan);font-size:18px;padding:0 6px;flex-shrink:0;opacity:.5;
+  font-family:var(--font-mono);
+}
+@media(max-width:768px){
+  .arch-flow{flex-direction:column}
+  .arch-arrow{transform:rotate(90deg)}
+}
+
+/* ─── API ENDPOINTS ─── */
+.endpoint-list{display:flex;flex-direction:column;gap:8px}
+.endpoint{
+  display:flex;align-items:center;gap:16px;padding:14px 20px;
+  background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:6px;
+  transition:border-color .3s;
+}
+.endpoint:hover{border-color:var(--cyan-dim)}
+.endpoint .method{
+  font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;
+  min-width:56px;text-align:center;letter-spacing:.5px;flex-shrink:0;
+}
+.method.get{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+.method.post{background:rgba(0,240,255,.1);color:var(--cyan);border:1px solid rgba(0,240,255,.2)}
+.endpoint .path{font-size:13px;font-weight:400;color:var(--white);flex:1}
+.endpoint .desc{font-size:11px;color:var(--gray);text-align:right}
+@media(max-width:600px){.endpoint .desc{display:none}}
+
+/* ─── FOOTER ─── */
+footer{
+  border-top:1px solid rgba(255,255,255,.06);padding:40px 0;text-align:center;
+  margin-top:40px;
+}
+footer p{font-size:12px;color:var(--gray)}
+footer a{color:var(--cyan);text-decoration:none;transition:opacity .2s}
+footer a:hover{opacity:.7}
+footer .footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:12px}
+
+/* Divider */
+.divider{width:60px;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);margin:0 auto 48px;opacity:.4}
+</style>
+</head>
+<body>
+<canvas id="particles"></canvas>
+
+<!-- ─── HERO ─── -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot" id="hero-dot"></span>
+    <span id="hero-status-text">Checking systems...</span>
+  </div>
+  <h1>Radiology<br>Interoperability<br>Platform</h1>
+  <p class="tagline">Automating radiology order intake, interpretation, and fulfillment</p>
+  <div class="hero-status">
+    <div class="stat">
+      <span class="stat-label">Services</span>
+      <span class="stat-value" id="stat-services">--</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Uptime</span>
+      <span class="stat-value" id="stat-uptime">--</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Latency</span>
+      <span class="stat-value" id="stat-latency">--</span>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7 7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</section>
+
+<!-- ─── LIVE SYSTEM STATUS ─── -->
+<section id="status">
+  <div class="container">
+    <div class="section-label">Monitoring</div>
+    <h2 class="section-title">Live System Status</h2>
+    <div class="divider"></div>
+    <div class="status-grid">
+      <div class="status-card" data-service="api-gateway">
+        <div class="status-dot loading"></div>
+        <div class="status-info">
+          <div class="status-name">API Gateway</div>
+          <div class="status-meta">Router &amp; Auth</div>
+        </div>
+        <div class="status-latency">--</div>
+      </div>
+      <div class="status-card" data-service="order-service">
+        <div class="status-dot loading"></div>
+        <div class="status-info">
+          <div class="status-name">Order Service</div>
+          <div class="status-meta">Lifecycle &amp; State Machine</div>
+        </div>
+        <div class="status-latency">--</div>
+      </div>
+      <div class="status-card" data-service="document-service">
+        <div class="status-dot loading"></div>
+        <div class="status-info">
+          <div class="status-name">Document Service</div>
+          <div class="status-meta">Ingestion &amp; OCR</div>
+        </div>
+        <div class="status-latency">--</div>
+      </div>
+      <div class="status-card" data-service="nlp-service">
+        <div class="status-dot loading"></div>
+        <div class="status-info">
+          <div class="status-name">NLP Service</div>
+          <div class="status-meta">Entity Extraction &amp; Coding</div>
+        </div>
+        <div class="status-latency">--</div>
+      </div>
+      <div class="status-card" data-service="integration-service">
+        <div class="status-dot loading"></div>
+        <div class="status-info">
+          <div class="status-name">Integration Service</div>
+          <div class="status-meta">HL7v2 &amp; FHIR R4</div>
+        </div>
+        <div class="status-latency">--</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CAPABILITIES ─── -->
+<section id="capabilities">
+  <div class="container">
+    <div class="section-label">Capabilities</div>
+    <h2 class="section-title">End-to-End Radiology Automation</h2>
+    <div class="divider"></div>
+    <div class="cap-grid">
+      <div class="cap-card">
+        <span class="cap-icon">&#128196;</span>
+        <h3>Document Ingestion</h3>
+        <p>Multi-channel intake pipeline supporting faxed orders, scanned PDFs, handwritten requisitions, and email attachments with automatic classification.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">Fax</span><span class="cap-tag">PDF</span><span class="cap-tag">Scan</span><span class="cap-tag">Handwritten</span><span class="cap-tag">Email</span>
+        </div>
+      </div>
+      <div class="cap-card">
+        <span class="cap-icon">&#129504;</span>
+        <h3>Clinical NLP</h3>
+        <p>Advanced natural language processing extracts clinical entities, maps to CPT and ICD-10 codes, and identifies procedure requirements from unstructured text.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">Entity Extraction</span><span class="cap-tag">CPT Matching</span><span class="cap-tag">ICD-10</span>
+        </div>
+      </div>
+      <div class="cap-card">
+        <span class="cap-icon">&#9989;</span>
+        <h3>Revenue Cycle Validation</h3>
+        <p>Real-time insurance eligibility verification, prior authorization checks, and order completeness validation before scheduling.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">Insurance</span><span class="cap-tag">Prior Auth</span><span class="cap-tag">Completeness</span>
+        </div>
+      </div>
+      <div class="cap-card">
+        <span class="cap-icon">&#128268;</span>
+        <h3>EMR Integration</h3>
+        <p>Bidirectional integration with major EMR systems via HL7v2 messaging and FHIR R4 REST APIs, including native Epic and Cerner connectors.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">HL7v2</span><span class="cap-tag">FHIR R4</span><span class="cap-tag">Epic</span><span class="cap-tag">Cerner</span>
+        </div>
+      </div>
+      <div class="cap-card">
+        <span class="cap-icon">&#128260;</span>
+        <h3>Order Lifecycle</h3>
+        <p>Full state machine management for radiology orders from intake through completion, with comprehensive audit trails and status tracking.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">State Machine</span><span class="cap-tag">Audit Trail</span><span class="cap-tag">Tracking</span>
+        </div>
+      </div>
+      <div class="cap-card">
+        <span class="cap-icon">&#128101;</span>
+        <h3>Human Review Workflow</h3>
+        <p>Configurable review queues with claim, approve, reject, and escalate actions. Ensures human oversight on complex or ambiguous orders.</p>
+        <div class="cap-tags">
+          <span class="cap-tag">Claim</span><span class="cap-tag">Approve</span><span class="cap-tag">Reject</span><span class="cap-tag">Escalate</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── ARCHITECTURE ─── -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2 class="section-title">Data Flow</h2>
+    <div class="divider"></div>
+    <div class="arch-flow">
+      <div class="arch-node"><span class="node-icon">&#128228;</span><span class="node-label">Document<br>Sources</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#128229;</span><span class="node-label">Ingestion</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#128065;</span><span class="node-label">OCR</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#129504;</span><span class="node-label">NLP</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#9989;</span><span class="node-label">Validation</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#128197;</span><span class="node-label">Scheduling</span></div>
+      <span class="arch-arrow">&#8594;</span>
+      <div class="arch-node"><span class="node-icon">&#127973;</span><span class="node-label">EMR</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── API ENDPOINTS ─── -->
+<section id="api">
+  <div class="container">
+    <div class="section-label">Developer</div>
+    <h2 class="section-title">API Endpoints</h2>
+    <div class="divider"></div>
+    <div class="endpoint-list">
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/api/documents/upload</span>
+        <span class="desc">Upload &amp; ingest a document</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/api/orders</span>
+        <span class="desc">List radiology orders</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/api/orders</span>
+        <span class="desc">Create a new order</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/api/integrations/hl7</span>
+        <span class="desc">Receive HL7v2 message</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/api/integrations/fhir/ServiceRequest</span>
+        <span class="desc">FHIR R4 ServiceRequest</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/health</span>
+        <span class="desc">System health check</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://5story.com" target="_blank" rel="noopener">5story.com</a>
+      <a href="https://github.com/5story" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>Built by <a href="https://5story.com" target="_blank" rel="noopener">5 Story Labs</a></p>
+  </div>
+</footer>
+
+<script>
+// ─── Particles ───
+(function(){
+  const c=document.getElementById('particles'),ctx=c.getContext('2d');
+  let w,h,particles=[];
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight}
+  window.addEventListener('resize',resize);resize();
+  for(let i=0;i<60;i++){
+    particles.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.5+.5});
+  }
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='rgba(0,240,255,0.15)';
+    for(const p of particles){
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=w;if(p.x>w)p.x=0;if(p.y<0)p.y=h;if(p.y>h)p.y=0;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ─── Health Check ───
+(function(){
+  const services=['api-gateway','order-service','document-service','nlp-service','integration-service'];
+
+  async function checkHealth(){
+    const start=performance.now();
+    try{
+      const res=await fetch('/health');
+      const latency=Math.round(performance.now()-start);
+      const data=await res.json();
+
+      // Update hero
+      const allUp=res.ok;
+      document.getElementById('hero-dot').className='dot '+(allUp?'':'');
+      document.getElementById('hero-dot').style.background=allUp?'var(--green)':'var(--red)';
+      document.getElementById('hero-status-text').textContent=allUp?'All Systems Operational':'Degraded';
+      document.getElementById('stat-latency').textContent=latency+'ms';
+
+      // Count services from health response
+      const svcStatuses=data.services||{};
+      const svcNames=Object.keys(svcStatuses);
+      const upCount=svcNames.filter(s=>svcStatuses[s]&&svcStatuses[s].status==='healthy').length;
+      document.getElementById('stat-services').textContent=upCount+'/'+Math.max(svcNames.length,services.length);
+      document.getElementById('stat-uptime').textContent=data.uptime?formatUptime(data.uptime):'--';
+
+      // Update individual cards
+      for(const card of document.querySelectorAll('.status-card')){
+        const svc=card.dataset.service;
+        const dot=card.querySelector('.status-dot');
+        const lat=card.querySelector('.status-latency');
+        dot.classList.remove('loading');
+
+        if(svc==='api-gateway'){
+          dot.classList.add('up');
+          lat.textContent=latency+'ms';
+        }else if(svcStatuses[svc]){
+          const s=svcStatuses[svc];
+          const isUp=s.status==='healthy';
+          dot.classList.add(isUp?'up':'down');
+          lat.textContent=s.responseTime?s.responseTime+'ms':'--';
+        }else{
+          dot.classList.add('down');
+          lat.textContent='N/A';
+        }
+      }
+    }catch(e){
+      document.getElementById('hero-dot').style.background='var(--red)';
+      document.getElementById('hero-status-text').textContent='Connection Error';
+      document.querySelectorAll('.status-dot').forEach(d=>{d.classList.remove('loading');d.classList.add('down')});
+    }
+  }
+
+  function formatUptime(seconds){
+    if(seconds<60)return Math.round(seconds)+'s';
+    if(seconds<3600)return Math.round(seconds/60)+'m';
+    if(seconds<86400)return Math.round(seconds/3600)+'h';
+    return Math.round(seconds/86400)+'d';
+  }
+
+  checkHealth();
+  setInterval(checkHealth,30000);
+})();
+</script>
+</body>
+</html>

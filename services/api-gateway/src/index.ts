@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import winston from 'winston';
+import path from 'path';
 import { config } from './config';
 import { authMiddleware } from './middleware/auth';
 import { apiRateLimiter } from './middleware/rate-limit';
@@ -25,8 +26,21 @@ export const logger = winston.createLogger({
 
 const app = express();
 
-// Security headers
-app.use(helmet());
+// Security headers (relaxed CSP for landing page inline styles/scripts and Google Fonts)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        connectSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+      },
+    },
+  })
+);
 
 // CORS
 app.use(
@@ -47,6 +61,9 @@ app.use(
 
 // Rate limiting
 app.use(apiRateLimiter);
+
+// Serve static landing page
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Health check (before auth)
 app.use('/health', healthRoutes);
